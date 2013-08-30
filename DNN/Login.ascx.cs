@@ -239,29 +239,97 @@ namespace DotNetNuke.Modules.Admin.Authentication
 
 		private void OnLoginClick(object sender, EventArgs e)
 		{
-			if ((UseCaptcha && ctlCaptcha.IsValid) || !UseCaptcha)
+			///TRY TO LOGIN WITH WS
+			var result = Innovaction.WSManager.ValidateLogin(txtUsername.Text, txtPassword.Text);
+			if (result.responseCode.ToString() == Innovaction.CustomerDataWS.responseCode.SUCCESS.ToString())
 			{
-				var loginStatus = UserLoginStatus.LOGIN_FAILURE;
-				var objUser = UserController.ValidateUser(PortalId, txtUsername.Text, txtPassword.Text, "DNN", string.Empty, PortalSettings.PortalName, IPAddress, ref loginStatus);
-				var authenticated = Null.NullBoolean;
-				var message = Null.NullString;
-				if (loginStatus == UserLoginStatus.LOGIN_USERNOTAPPROVED)
+				/****** CREATE USER ******/
+			
+				//We create the new user in the portal, even if it exists we don't care
+                UserInfo newUser = new UserInfo();
+                newUser.Username = txtUsername.Text;
+                newUser.PortalID = PortalId;
+                newUser.DisplayName = txtUsername.Text;
+                newUser.Email = txtUsername.Text;
+                newUser.FirstName = txtUsername.Text;
+                newUser.LastName = txtUsername.Text;
+                newUser.Membership.Password = txtPassword.Text;
+                //newUser.Profile.SetProfileProperty("tel", "47940983");
+
+				//The line that creates the new User
+                DotNetNuke.Security.Membership.UserCreateStatus userResult = DotNetNuke.Entities.Users.UserController.CreateUser(ref newUser);
+				
+				
+				/****** LOGIN USER AT THE PORTAL ******/
+				
+				var myUser = DotNetNuke.Entities.Users.UserController.GetUserByName(txtUsername.Text); // IF WE USE THIS WE CAN LOGIN WITHOUT PASSWORD
+				DotNetNuke.Entities.Users.UserController.UserLogin(PortalId, myUser, PortalSettings.PortalName, "", false);
+				
+				//try to redirect
+				string myReturnUrl = "";
+				try
 				{
-				    message = "UserNotAuthorized";
+					myReturnUrl = System.Web.HttpContext.Current.Request.QueryString["returnurl"].ToString();
 				}
-				else
+				catch
 				{
-					authenticated = (loginStatus != UserLoginStatus.LOGIN_FAILURE);
+					
 				}
 				
-				//Raise UserAuthenticated Event
-				var eventArgs = new UserAuthenticatedEventArgs(objUser, txtUsername.Text, loginStatus, "DNN")
-				                    {
-				                        Authenticated = authenticated, 
-                                        Message = message,
-                                        RememberMe = chkCookie.Checked
-				                    };
-				OnUserAuthenticated(eventArgs);
+				if(myReturnUrl != "")
+				{
+					string unescapedUrl = System.Uri.UnescapeDataString(myReturnUrl);
+					System.Web.HttpContext.Current.Response.Redirect(unescapedUrl);
+				}	
+				
+				else
+				{
+					System.Web.HttpContext.Current.Response.Redirect("/");
+				}
+					
+				
+				
+				/*
+				var eventArgs = new UserAuthenticatedEventArgs(myUser, txtUsername.Text, UserLoginStatus.LOGIN_SUCCESS, "DNN")
+										{
+											Authenticated = True, 
+											Message = "",
+											RememberMe = False
+										};
+									
+					OnUserAuthenticated(eventArgs);
+				
+				//System.Web.HttpContext.Current.Response.Redirect("http://www.bspdota.com.ar/hola?=" + "1.0.1" + result.responseCode.ToString());
+				*/
+			}
+			
+			else ///ELSE TRY WITH DOTNETNUKE
+			{
+			
+				if ((UseCaptcha && ctlCaptcha.IsValid) || !UseCaptcha)
+				{
+					var loginStatus = UserLoginStatus.LOGIN_FAILURE;
+					var objUser = UserController.ValidateUser(PortalId, txtUsername.Text, txtPassword.Text, "DNN", string.Empty, PortalSettings.PortalName, IPAddress, ref loginStatus);
+					var authenticated = Null.NullBoolean;
+					var message = Null.NullString;
+					if (loginStatus == UserLoginStatus.LOGIN_USERNOTAPPROVED)
+					{
+						message = "UserNotAuthorized";
+					}
+					else
+					{
+						authenticated = (loginStatus != UserLoginStatus.LOGIN_FAILURE);
+					}
+					
+					//Raise UserAuthenticated Event
+					var eventArgs = new UserAuthenticatedEventArgs(objUser, txtUsername.Text, loginStatus, "DNN")
+										{
+											Authenticated = authenticated, 
+											Message = message,
+											RememberMe = chkCookie.Checked
+										};
+					OnUserAuthenticated(eventArgs);
+				}
 			}
 		}
 
